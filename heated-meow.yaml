@@ -1,0 +1,106 @@
+blueprint:
+  name: Heated Cat Bed Automation (Season, Forecast, Multi-Plugs)
+  description: Automate multiple smart plugs for heated cat beds during winter or when the forecast temperature drops below a threshold (F/C).
+  domain: automation
+  input:
+    plug_entities:
+      name: Smart Plugs
+      description: The smart plugs connected to heated cat beds.
+      selector:
+        target:
+          entity:
+            domain: switch
+    temperature_sensor:
+      name: Outdoor Temperature Sensor
+      description: Entity providing real-time outdoor temperature data.
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    weather_entity:
+      name: Weather Entity (Optional)
+      description: Weather entity to check forecasted temperature. Leave empty to skip.
+      default: ""
+      selector:
+        entity:
+          domain: weather
+    season_entity:
+      name: Season Entity
+      description: Entity tracking the current season (e.g., `sensor.season`).
+      selector:
+        entity:
+          domain: sensor
+    temperature_unit:
+      name: Temperature Unit
+      description: Choose Fahrenheit (°F) or Celsius (°C).
+      selector:
+        select:
+          options:
+            - °F
+            - °C
+      default: °F
+    min_temperature:
+      name: Minimum Temperature
+      description: Threshold to turn on the cat beds.
+      default: 45
+      selector:
+        number:
+          min: -20
+          max: 100
+          mode: slider
+
+trigger:
+  - platform: numeric_state
+    entity_id: !input temperature_sensor
+    below: !input min_temperature
+    for:
+      minutes: 5
+  - platform: template
+    value_template: >
+      {% if !input weather_entity != "" %}
+        {% set forecast_temp = state_attr('!input weather_entity', 'temperature') %}
+        {% if is_state('!input temperature_unit', '°F') %}
+          {{ forecast_temp | float < (!input min_temperature | float) }}
+        {% else %}
+          {{ ((forecast_temp | float - 32) * 5 / 9) < (!input min_temperature | float) }}
+        {% endif %}
+      {% else %}
+        false
+      {% endif %}
+    for:
+      minutes: 5
+
+condition:
+  - condition: state
+    entity_id: !input season_entity
+    state: "winter"
+
+action:
+  - service: switch.turn_on
+    target:
+      entity_id: !input plug_entities
+  - wait_for_trigger:
+      - platform: numeric_state
+        entity_id: !input temperature_sensor
+        above: !input min_temperature
+        for:
+          minutes: 5
+      - platform: template
+        value_template: >
+          {% if !input weather_entity != "" %}
+            {% set forecast_temp = state_attr('!input weather_entity', 'temperature') %}
+            {% if is_state('!input temperature_unit', '°F') %}
+              {{ forecast_temp | float > (!input min_temperature | float) }}
+            {% else %}
+              {{ ((forecast_temp | float - 32) * 5 / 9) > (!input min_temperature | float) }}
+            {% endif %}
+          {% else %}
+            false
+          {% endif %}
+        for:
+          minutes: 5
+  - service: switch.turn_off
+    target:
+      entity_id: !input plug_entities
+
+mode: single
