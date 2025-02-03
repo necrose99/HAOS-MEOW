@@ -1,6 +1,6 @@
 blueprint:
-  name: Heated Cat Bed Automation (Season, Forecast, Multi-Plugs)
-  description: Automate multiple smart plugs for heated cat beds during winter or when the forecast temperature drops below a threshold (F/C).
+  name: Heated Cat Bed Automation with Proximity Detection
+  description: Automate multiple smart plugs for heated cat beds during winter or when the forecast temperature drops below a threshold (F/C). Includes optional proximity detection.
   domain: automation
   input:
     plug_entities:
@@ -30,6 +30,22 @@ blueprint:
       selector:
         entity:
           domain: sensor
+    proximity_sensor:
+      name: Proximity Sensor (Optional)
+      description: Entity tracking proximity to the cat beds (e.g., BLE tracker, SmartTag).
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+    proximity_range:
+      name: Proximity Range
+      description: Maximum distance to detect presence (in feet, yards, or meters).
+      default: 3
+      selector:
+        number:
+          min: 1
+          max: 50
+          unit_of_measurement: "meters"
     temperature_unit:
       name: Temperature Unit
       description: Choose Fahrenheit (°F) or Celsius (°C).
@@ -74,6 +90,13 @@ condition:
   - condition: state
     entity_id: !input season_entity
     state: "winter"
+  - condition: template
+    value_template: >
+      {% if !input proximity_sensor != "" %}
+        {{ states('!input proximity_sensor') | float <= !input proximity_range }}
+      {% else %}
+        true
+      {% endif %}
 
 action:
   - service: switch.turn_on
